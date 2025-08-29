@@ -26,6 +26,30 @@ enum Commands {
     },
     List,
     ToggleActive,
+    Stage(StageArgs),
+    Unstage(UnstageArgs),
+}
+
+#[derive(clap::Args, Debug)]
+pub struct StageArgs {
+    #[arg(group = "target", required = true)]
+    pub window_id: Option<u64>,
+    #[arg(long, group = "target", required = true)]
+    pub all: bool,
+    #[arg(long, group = "target", required = true)]
+    pub list: bool,
+    #[arg(long, group = "target", required = true)]
+    pub active: bool,
+}
+
+#[derive(clap::Args, Debug)]
+pub struct UnstageArgs {
+    #[arg(group = "target", required = true)]
+    pub window_id: Option<u64>,
+    #[arg(long, group = "target", required = true)]
+    pub all: bool,
+    #[arg(long, group = "target", required = true)]
+    pub active: bool,
 }
 
 pub async fn run_cli() -> Result<()> {
@@ -42,10 +66,32 @@ pub async fn run_cli() -> Result<()> {
         Commands::Remove { window_id } => format!("remove {window_id}\n"),
         Commands::List => "list\n".to_string(),
         Commands::ToggleActive => "toggle_active\n".to_string(),
+        Commands::Stage(args) => {
+            if args.all {
+                "stage --all\n".to_string()
+            } else if args.list {
+                "stage --list\n".to_string()
+            } else if args.active {
+                "stage --active\n".to_string()
+            } else {
+                format!("stage {}\n", args.window_id.unwrap())
+            }
+        }
+        Commands::Unstage(args) => {
+            if args.all {
+                "unstage --all\n".to_string()
+            } else if args.active {
+                "unstage --active\n".to_string()
+            } else {
+                format!("unstage {}\n", args.window_id.unwrap())
+            }
+        }
     };
+
 
     writer.write_all(cmd_str.as_bytes()).await?;
     writer.flush().await?;
+
 
     let mut response = String::new();
     reader.read_line(&mut response).await?;
