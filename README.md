@@ -21,6 +21,9 @@ Quickly list all currently sticky windows to stay organized.
 ⚡ **Instant Toggle:**
 Toggle the sticky state of the currently active window with a single command or shortcut.
 
+📦 **Window Staging:**
+Temporarily move sticky windows to a dedicated "stage" workspace and restore them to the current workspace when needed.
+
 ---
 
 ## Installation
@@ -91,6 +94,13 @@ Control `nsticky` from the terminal using CLI commands:
 ./target/release/nsticky remove <window_id>       # Remove a window from the sticky list
 ./target/release/nsticky list                      # List all sticky windows
 ./target/release/nsticky toggle-active             # Toggle sticky state of the active window
+./target/release/nsticky stage <window_id>         # Move a sticky window to the "stage" workspace
+./target/release/nsticky stage --all               # Move all sticky windows to the "stage" workspace
+./target/release/nsticky stage --list              # List all currently staged windows
+./target/release/nsticky stage --active            # Move the active sticky window to the "stage" workspace
+./target/release/nsticky unstage <window_id>       # Move a staged window back to the current active workspace
+./target/release/nsticky unstage --all             # Move all staged windows back to the current active workspace
+./target/release/nsticky unstage --active          # Move the active staged window back to the current active workspace
 ```
 
 You can also set up a shortcut in `niri`:
@@ -121,6 +131,14 @@ The daemon also listens to `niri`’s event stream to automatically handle windo
 🔗 **Integration:**
 
 - **niri:** The window manager integration foundation, enabling seamless event handling.
+
+---
+
+## Notes
+
+- `nsticky` relies on the `niri` window manager.
+- The daemon requires the `NIRI_SOCKET` environment variable to connect to Niri.
+- The staging feature moves windows to a workspace named "stage". Ensure this workspace exists in your Niri configuration, or it will be created automatically when needed.
 
 ---
 
