@@ -74,16 +74,18 @@ async fn handle_cli_connection(stream: UnixStream, business_logic: BusinessLogic
 
     // 处理请求并生成响应
     let response = match request {
-        protocol::Request::Add { window_id } => match business_logic.add_sticky_window(window_id).await {
-            Ok(is_new) => {
-                if is_new {
-                    protocol::Response::Success("Added\n".to_string())
-                } else {
-                    protocol::Response::Success("Already in sticky list\n".to_string())
+        protocol::Request::Add { window_id } => {
+            match business_logic.add_sticky_window(window_id).await {
+                Ok(is_new) => {
+                    if is_new {
+                        protocol::Response::Success("Added\n".to_string())
+                    } else {
+                        protocol::Response::Success("Already in sticky list\n".to_string())
+                    }
                 }
+                Err(e) => protocol::Response::Error(e.to_string()),
             }
-            Err(e) => protocol::Response::Error(e.to_string()),
-        },
+        }
         protocol::Request::Remove { window_id } => {
             match business_logic.remove_sticky_window(window_id).await {
                 Ok(was_present) => {
@@ -132,14 +134,19 @@ async fn handle_cli_connection(stream: UnixStream, business_logic: BusinessLogic
 
                 let is_staged = business_logic.is_window_staged(active_id).await;
                 if is_staged {
-                    let current_ws_id = match crate::system_integration::get_active_workspace_id().await {
-                        Ok(id) => id,
-                        Err(_) => {
-                            return Ok(writer.write_all(b"Failed to get active workspace ID\n").await?);
-                        }
-                    };
+                    let current_ws_id =
+                        match crate::system_integration::get_active_workspace_id().await {
+                            Ok(id) => id,
+                            Err(_) => {
+                                return Ok(writer
+                                    .write_all(b"Failed to get active workspace ID\n")
+                                    .await?);
+                            }
+                        };
                     match business_logic.unstage_active_window(current_ws_id).await {
-                        Ok(()) => protocol::Response::Success("Unstaged active window\n".to_string()),
+                        Ok(()) => {
+                            protocol::Response::Success("Unstaged active window\n".to_string())
+                        }
                         Err(e) => protocol::Response::Error(e.to_string()),
                     }
                 } else {
@@ -161,13 +168,17 @@ async fn handle_cli_connection(stream: UnixStream, business_logic: BusinessLogic
             let current_ws_id = match crate::system_integration::get_active_workspace_id().await {
                 Ok(id) => id,
                 Err(_) => {
-                    return Ok(writer.write_all(b"Failed to get active workspace ID\n").await?);
+                    return Ok(writer
+                        .write_all(b"Failed to get active workspace ID\n")
+                        .await?);
                 }
             };
 
             if unstage_args.all {
                 match business_logic.unstage_all_windows(current_ws_id).await {
-                    Ok(count) => protocol::Response::Success(format!("Unstaged {} windows\n", count)),
+                    Ok(count) => {
+                        protocol::Response::Success(format!("Unstaged {} windows\n", count))
+                    }
                     Err(e) => protocol::Response::Error(e.to_string()),
                 }
             } else if unstage_args.active {
@@ -176,7 +187,10 @@ async fn handle_cli_connection(stream: UnixStream, business_logic: BusinessLogic
                     Err(e) => protocol::Response::Error(e.to_string()),
                 }
             } else if let Some(window_id) = unstage_args.window_id {
-                match business_logic.unstage_window(window_id, current_ws_id).await {
+                match business_logic
+                    .unstage_window(window_id, current_ws_id)
+                    .await
+                {
                     Ok(()) => protocol::Response::Success("Unstaged window\n".to_string()),
                     Err(e) => protocol::Response::Error(e.to_string()),
                 }
@@ -193,7 +207,6 @@ async fn handle_cli_connection(stream: UnixStream, business_logic: BusinessLogic
     Ok(())
 }
 
-
 async fn run_watcher(business_logic: BusinessLogic) -> Result<()> {
     let socket_path = std::env::var("NIRI_SOCKET").expect("NIRI_SOCKET env var not set");
     let stream = UnixStream::connect(&socket_path).await?;
@@ -206,14 +219,13 @@ async fn run_watcher(business_logic: BusinessLogic) -> Result<()> {
     let mut line = String::new();
 
     while reader.read_line(&mut line).await? > 0 {
-        if let Ok(v) = serde_json::from_str::<Value>(&line) {
-            if let Some(ws) = v.get("WorkspaceActivated") {
-                if let Some(ws_id) = ws.get("id").and_then(|id| id.as_u64()) {
-                    println!("Workspace switched to: {ws_id}");
-                    if let Err(_e) = business_logic.handle_workspace_activation(ws_id).await {
-                        eprintln!("Failed to handle workspace activation: {_e:?}");
-                    }
-                }
+        if let Ok(v) = serde_json::from_str::<Value>(&line)
+            && let Some(ws) = v.get("WorkspaceActivated")
+            && let Some(ws_id) = ws.get("id").and_then(|id| id.as_u64())
+        {
+            println!("Workspace switched to: {ws_id}");
+            if let Err(_e) = business_logic.handle_workspace_activation(ws_id).await {
+                eprintln!("Failed to handle workspace activation: {_e:?}");
             }
         }
         line.clear();

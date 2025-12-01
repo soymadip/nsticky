@@ -69,7 +69,6 @@ impl BusinessLogic {
         }
     }
 
-
     pub async fn stage_window(&self, window_id: u64) -> Result<()> {
         let full_window_list = crate::system_integration::get_full_window_list().await?;
         if !full_window_list.contains(&window_id) {
@@ -89,7 +88,8 @@ impl BusinessLogic {
             return Err(anyhow::anyhow!("Window is not sticky, cannot stage"));
         }
 
-        if let Err(e) = crate::system_integration::move_to_named_workspace(window_id, "stage").await {
+        if let Err(e) = crate::system_integration::move_to_named_workspace(window_id, "stage").await
+        {
             let mut sticky = self.sticky_windows.lock().await;
             sticky.insert(window_id);
             return Err(e);
@@ -139,7 +139,6 @@ impl BusinessLogic {
         staged.contains(&window_id)
     }
 
-
     pub async fn stage_all_windows(&self) -> Result<usize> {
         let sticky_ids = self.sticky_windows.lock().await.clone();
         if sticky_ids.is_empty() {
@@ -155,7 +154,10 @@ impl BusinessLogic {
             .collect();
 
         for id in valid_sticky_ids {
-            if crate::system_integration::move_to_named_workspace(id, "stage").await.is_ok() {
+            if crate::system_integration::move_to_named_workspace(id, "stage")
+                .await
+                .is_ok()
+            {
                 successfully_staged.push(id);
             } else {
                 eprintln!("Failed to move window {} to stage", id);
@@ -196,7 +198,8 @@ impl BusinessLogic {
             return Err(anyhow::anyhow!("Window is not staged"));
         }
 
-        if let Err(e) = crate::system_integration::move_to_workspace(window_id, workspace_id).await {
+        if let Err(e) = crate::system_integration::move_to_workspace(window_id, workspace_id).await
+        {
             let mut staged = self.staged_set.lock().await;
             staged.insert(window_id);
             return Err(e);
@@ -241,7 +244,6 @@ impl BusinessLogic {
         Ok(())
     }
 
-
     pub async fn unstage_all_windows(&self, workspace_id: u64) -> Result<usize> {
         let ids_to_unstage: Vec<u64> = {
             let staged = self.staged_set.lock().await;
@@ -259,7 +261,10 @@ impl BusinessLogic {
 
         let mut successfully_unstaged = Vec::new();
         for id in &valid_ids_to_unstage {
-            if crate::system_integration::move_to_workspace(*id, workspace_id).await.is_ok() {
+            if crate::system_integration::move_to_workspace(*id, workspace_id)
+                .await
+                .is_ok()
+            {
                 successfully_unstaged.push(*id);
             } else {
                 eprintln!("Failed to move window {} to workspace {}", id, workspace_id);
@@ -280,7 +285,9 @@ impl BusinessLogic {
         // 更新粘性窗口列表，移除不再存在的窗口
         let sticky_snapshot = {
             let mut sticky = self.sticky_windows.lock().await;
-            let full_window_list = crate::system_integration::get_full_window_list().await.unwrap_or_default();
+            let full_window_list = crate::system_integration::get_full_window_list()
+                .await
+                .unwrap_or_default();
             sticky.retain(|win_id| full_window_list.contains(win_id));
             println!("Updated sticky windows: {:?}", *sticky);
             sticky.clone()

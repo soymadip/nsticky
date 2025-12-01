@@ -1,12 +1,11 @@
 use anyhow::Result;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use std::collections::HashSet;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     net::UnixStream,
     process::Command,
 };
-
 
 // 与Niri进行交互的函数
 pub async fn get_active_workspace_id() -> Result<u64> {
@@ -24,10 +23,10 @@ pub async fn get_active_workspace_id() -> Result<u64> {
 
     if let Some(workspaces) = json.as_array() {
         for workspace in workspaces {
-            if workspace.get("is_active").and_then(|v| v.as_bool()) == Some(true) {
-                if let Some(id) = workspace.get("id").and_then(|v| v.as_u64()) {
-                    return Ok(id);
-                }
+            if workspace.get("is_active").and_then(|v| v.as_bool()) == Some(true)
+                && let Some(id) = workspace.get("id").and_then(|v| v.as_u64())
+            {
+                return Ok(id);
             }
         }
     }
@@ -72,7 +71,6 @@ pub async fn get_full_window_list() -> Result<HashSet<u64>> {
     }
     Ok(window_ids)
 }
-
 
 pub async fn move_to_workspace(win_id: u64, ws_id: u64) -> Result<()> {
     let socket_path = std::env::var("NIRI_SOCKET")?;
