@@ -7,6 +7,7 @@ use tokio::{
     process::Command,
 };
 
+
 // 与Niri进行交互的函数
 pub async fn get_active_workspace_id() -> Result<u64> {
     let output = tokio::process::Command::new("niri")
@@ -71,6 +72,7 @@ pub async fn get_full_window_list() -> Result<HashSet<u64>> {
     }
     Ok(window_ids)
 }
+
 
 pub async fn move_to_workspace(win_id: u64, ws_id: u64) -> Result<()> {
     let socket_path = std::env::var("NIRI_SOCKET")?;

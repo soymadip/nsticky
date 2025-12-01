@@ -122,9 +122,31 @@ async fn handle_cli_connection(stream: UnixStream, business_logic: BusinessLogic
                     Err(e) => protocol::Response::Error(e.to_string()),
                 }
             } else if stage_args.active {
-                match business_logic.stage_active_window().await {
-                    Ok(()) => protocol::Response::Success("Staged active window\n".to_string()),
-                    Err(e) => protocol::Response::Error(e.to_string()),
+                // 检查活动窗口是否已经在staged列表中，如果是则unstage，否则stage
+                let active_id = match crate::system_integration::get_active_window_id().await {
+                    Ok(id) => id,
+                    Err(_) => {
+                        return Ok(writer.write_all(b"Failed to get active window\n").await?);
+                    }
+                };
+
+                let is_staged = business_logic.is_window_staged(active_id).await;
+                if is_staged {
+                    let current_ws_id = match crate::system_integration::get_active_workspace_id().await {
+                        Ok(id) => id,
+                        Err(_) => {
+                            return Ok(writer.write_all(b"Failed to get active workspace ID\n").await?);
+                        }
+                    };
+                    match business_logic.unstage_active_window(current_ws_id).await {
+                        Ok(()) => protocol::Response::Success("Unstaged active window\n".to_string()),
+                        Err(e) => protocol::Response::Error(e.to_string()),
+                    }
+                } else {
+                    match business_logic.stage_active_window().await {
+                        Ok(()) => protocol::Response::Success("Staged active window\n".to_string()),
+                        Err(e) => protocol::Response::Error(e.to_string()),
+                    }
                 }
             } else if let Some(window_id) = stage_args.window_id {
                 match business_logic.stage_window(window_id).await {

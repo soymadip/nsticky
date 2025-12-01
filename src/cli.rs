@@ -16,40 +16,66 @@ struct Cli {
 
 #[derive(Subcommand, Debug)]
 enum Commands {
+    /// Manage sticky windows
+    Sticky {
+        #[command(subcommand)]
+        action: StickyAction,
+    },
+    /// Manage staged windows
+    Stage {
+        #[command(subcommand)]
+        action: StageAction,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+enum StickyAction {
+    /// Add window to sticky list
+    #[command(alias = "a")]
     Add {
         /// Window ID to add to sticky list
         window_id: u64,
     },
+    /// Remove window from sticky list
+    #[command(alias = "r")]
     Remove {
         /// Window ID to remove from sticky list
         window_id: u64,
     },
+    /// List all sticky windows
+    #[command(alias = "l")]
     List,
+    /// Toggle active window in sticky list
+    #[command(alias = "t")]
     ToggleActive,
-    Stage(StageArgs),
-    Unstage(UnstageArgs),
 }
 
-#[derive(clap::Args, Debug)]
-pub struct StageArgs {
-    #[arg(group = "target", required = true)]
-    pub window_id: Option<u64>,
-    #[arg(long, group = "target", required = true)]
-    pub all: bool,
-    #[arg(long, group = "target", required = true)]
-    pub list: bool,
-    #[arg(long, group = "target", required = true)]
-    pub active: bool,
-}
-
-#[derive(clap::Args, Debug)]
-pub struct UnstageArgs {
-    #[arg(group = "target", required = true)]
-    pub window_id: Option<u64>,
-    #[arg(long, group = "target", required = true)]
-    pub all: bool,
-    #[arg(long, group = "target", required = true)]
-    pub active: bool,
+#[derive(Subcommand, Debug)]
+enum StageAction {
+    /// List all staged windows
+    #[command(alias = "l")]
+    List,
+    /// Add window to stage (move from sticky to stage workspace)
+    #[command(alias = "a")]
+    Add {
+        /// Window ID to stage
+        window_id: u64,
+    },
+    /// Remove window from stage (move from stage to current workspace)
+    #[command(alias = "r")]
+    Remove {
+        /// Window ID to unstage
+        window_id: u64,
+    },
+    /// Toggle active window in stage
+    #[command(alias = "t")]
+    ToggleActive,
+    /// Add all sticky windows to stage
+    #[command(alias = "aa")]
+    AddAll,
+    /// Remove all staged windows
+    #[command(alias = "ra")]
+    RemoveAll,
 }
 
 pub async fn run_cli() -> Result<()> {
@@ -62,36 +88,24 @@ pub async fn run_cli() -> Result<()> {
 
     // 根据子命令构造命令字符串
     let cmd_str = match cli.command {
-        Commands::Add { window_id } => format!("add {window_id}\n"),
-        Commands::Remove { window_id } => format!("remove {window_id}\n"),
-        Commands::List => "list\n".to_string(),
-        Commands::ToggleActive => "toggle_active\n".to_string(),
-        Commands::Stage(args) => {
-            if args.all {
-                "stage --all\n".to_string()
-            } else if args.list {
-                "stage --list\n".to_string()
-            } else if args.active {
-                "stage --active\n".to_string()
-            } else {
-                format!("stage {}\n", args.window_id.unwrap())
-            }
-        }
-        Commands::Unstage(args) => {
-            if args.all {
-                "unstage --all\n".to_string()
-            } else if args.active {
-                "unstage --active\n".to_string()
-            } else {
-                format!("unstage {}\n", args.window_id.unwrap())
-            }
-        }
+        Commands::Sticky { action } => match action {
+            StickyAction::Add { window_id } => format!("add {window_id}\n"),
+            StickyAction::Remove { window_id } => format!("remove {window_id}\n"),
+            StickyAction::List => "list\n".to_string(),
+            StickyAction::ToggleActive => "toggle_active\n".to_string(),
+        },
+        Commands::Stage { action } => match action {
+            StageAction::List => "stage --list\n".to_string(),
+            StageAction::Add { window_id } => format!("stage {window_id}\n"),
+            StageAction::Remove { window_id } => format!("unstage {window_id}\n"),
+            StageAction::ToggleActive => "stage --active\n".to_string(),
+            StageAction::AddAll => "stage --all\n".to_string(),
+            StageAction::RemoveAll => "unstage --all\n".to_string(),
+        },
     };
-
 
     writer.write_all(cmd_str.as_bytes()).await?;
     writer.flush().await?;
-
 
     let mut response = String::new();
     reader.read_line(&mut response).await?;

@@ -69,17 +69,33 @@ impl BusinessLogic {
         }
     }
 
+
     pub async fn stage_window(&self, window_id: u64) -> Result<()> {
-        let is_sticky = self.sticky_windows.lock().await.contains(&window_id);
-        if !is_sticky {
+        let full_window_list = crate::system_integration::get_full_window_list().await?;
+        if !full_window_list.contains(&window_id) {
+            return Err(anyhow::anyhow!("Window not found in Niri"));
+        }
+
+        let was_sticky = {
+            let mut sticky = self.sticky_windows.lock().await;
+            let was_sticky = sticky.contains(&window_id);
+            if was_sticky {
+                sticky.remove(&window_id);
+            }
+            was_sticky
+        };
+
+        if !was_sticky {
             return Err(anyhow::anyhow!("Window is not sticky, cannot stage"));
         }
 
-        crate::system_integration::move_to_named_workspace(window_id, "stage").await?;
+        if let Err(e) = crate::system_integration::move_to_named_workspace(window_id, "stage").await {
+            let mut sticky = self.sticky_windows.lock().await;
+            sticky.insert(window_id);
+            return Err(e);
+        }
 
-        let mut sticky = self.sticky_windows.lock().await;
         let mut staged = self.staged_set.lock().await;
-        sticky.remove(&window_id);
         staged.insert(window_id);
 
         Ok(())
@@ -87,21 +103,42 @@ impl BusinessLogic {
 
     pub async fn stage_active_window(&self) -> Result<()> {
         let id = crate::system_integration::get_active_window_id().await?;
-        
-        let is_sticky = self.sticky_windows.lock().await.contains(&id);
-        if !is_sticky {
+
+        let full_window_list = crate::system_integration::get_full_window_list().await?;
+        if !full_window_list.contains(&id) {
+            return Err(anyhow::anyhow!("Active window not found in Niri"));
+        }
+
+        let was_sticky = {
+            let mut sticky = self.sticky_windows.lock().await;
+            let was_sticky = sticky.contains(&id);
+            if was_sticky {
+                sticky.remove(&id);
+            }
+            was_sticky
+        };
+
+        if !was_sticky {
             return Err(anyhow::anyhow!("Window is not sticky, cannot stage"));
         }
 
-        crate::system_integration::move_to_named_workspace(id, "stage").await?;
+        if let Err(e) = crate::system_integration::move_to_named_workspace(id, "stage").await {
+            let mut sticky = self.sticky_windows.lock().await;
+            sticky.insert(id);
+            return Err(e);
+        }
 
-        let mut sticky = self.sticky_windows.lock().await;
         let mut staged = self.staged_set.lock().await;
-        sticky.remove(&id);
         staged.insert(id);
 
         Ok(())
     }
+
+    pub async fn is_window_staged(&self, window_id: u64) -> bool {
+        let staged = self.staged_set.lock().await;
+        staged.contains(&window_id)
+    }
+
 
     pub async fn stage_all_windows(&self) -> Result<usize> {
         let sticky_ids = self.sticky_windows.lock().await.clone();
@@ -109,28 +146,30 @@ impl BusinessLogic {
             return Ok(0);
         }
 
-        let mut staged_count = 0;
-        let mut successfully_staged = HashSet::new();
+        let mut successfully_staged = Vec::new();
 
-        for id in sticky_ids {
+        let full_window_list = crate::system_integration::get_full_window_list().await?;
+        let valid_sticky_ids: Vec<u64> = sticky_ids
+            .into_iter()
+            .filter(|id| full_window_list.contains(id))
+            .collect();
+
+        for id in valid_sticky_ids {
             if crate::system_integration::move_to_named_workspace(id, "stage").await.is_ok() {
-                successfully_staged.insert(id);
-                staged_count += 1;
+                successfully_staged.push(id);
             } else {
                 eprintln!("Failed to move window {} to stage", id);
             }
         }
 
-        if staged_count > 0 {
-            let mut sticky = self.sticky_windows.lock().await;
-            let mut staged = self.staged_set.lock().await;
-            for id in &successfully_staged {
-                sticky.remove(id);
-                staged.insert(*id);
-            }
+        let mut sticky = self.sticky_windows.lock().await;
+        let mut staged = self.staged_set.lock().await;
+        for id in &successfully_staged {
+            sticky.remove(id);
+            staged.insert(*id);
         }
 
-        Ok(staged_count)
+        Ok(successfully_staged.len())
     }
 
     pub async fn list_staged_windows(&self) -> Result<Vec<u64>> {
@@ -139,14 +178,30 @@ impl BusinessLogic {
     }
 
     pub async fn unstage_window(&self, window_id: u64, workspace_id: u64) -> Result<()> {
-        let mut staged = self.staged_set.lock().await;
-        if !staged.contains(&window_id) {
+        let full_window_list = crate::system_integration::get_full_window_list().await?;
+        if !full_window_list.contains(&window_id) {
+            return Err(anyhow::anyhow!("Window not found in Niri"));
+        }
+
+        let was_staged = {
+            let mut staged = self.staged_set.lock().await;
+            let was_staged = staged.contains(&window_id);
+            if was_staged {
+                staged.remove(&window_id);
+            }
+            was_staged
+        };
+
+        if !was_staged {
             return Err(anyhow::anyhow!("Window is not staged"));
         }
 
-        crate::system_integration::move_to_workspace(window_id, workspace_id).await?;
+        if let Err(e) = crate::system_integration::move_to_workspace(window_id, workspace_id).await {
+            let mut staged = self.staged_set.lock().await;
+            staged.insert(window_id);
+            return Err(e);
+        }
 
-        staged.remove(&window_id);
         let mut sticky = self.sticky_windows.lock().await;
         sticky.insert(window_id);
 
@@ -155,19 +210,37 @@ impl BusinessLogic {
 
     pub async fn unstage_active_window(&self, workspace_id: u64) -> Result<()> {
         let id = crate::system_integration::get_active_window_id().await?;
-        let mut staged = self.staged_set.lock().await;
-        if !staged.contains(&id) {
+
+        let full_window_list = crate::system_integration::get_full_window_list().await?;
+        if !full_window_list.contains(&id) {
+            return Err(anyhow::anyhow!("Active window not found in Niri"));
+        }
+
+        let was_staged = {
+            let mut staged = self.staged_set.lock().await;
+            let was_staged = staged.contains(&id);
+            if was_staged {
+                staged.remove(&id);
+            }
+            was_staged
+        };
+
+        if !was_staged {
             return Err(anyhow::anyhow!("Active window is not staged"));
         }
 
-        crate::system_integration::move_to_workspace(id, workspace_id).await?;
+        if let Err(e) = crate::system_integration::move_to_workspace(id, workspace_id).await {
+            let mut staged = self.staged_set.lock().await;
+            staged.insert(id);
+            return Err(e);
+        }
 
-        staged.remove(&id);
         let mut sticky = self.sticky_windows.lock().await;
         sticky.insert(id);
 
         Ok(())
     }
+
 
     pub async fn unstage_all_windows(&self, workspace_id: u64) -> Result<usize> {
         let ids_to_unstage: Vec<u64> = {
@@ -178,22 +251,26 @@ impl BusinessLogic {
             staged.iter().copied().collect()
         };
 
-        let mut successfully_unstaged = HashSet::new();
-        for id in &ids_to_unstage {
+        let full_window_list = crate::system_integration::get_full_window_list().await?;
+        let valid_ids_to_unstage: Vec<u64> = ids_to_unstage
+            .into_iter()
+            .filter(|id| full_window_list.contains(id))
+            .collect();
+
+        let mut successfully_unstaged = Vec::new();
+        for id in &valid_ids_to_unstage {
             if crate::system_integration::move_to_workspace(*id, workspace_id).await.is_ok() {
-                successfully_unstaged.insert(*id);
+                successfully_unstaged.push(*id);
             } else {
                 eprintln!("Failed to move window {} to workspace {}", id, workspace_id);
             }
         }
 
-        if !successfully_unstaged.is_empty() {
-            let mut staged = self.staged_set.lock().await;
-            let mut sticky = self.sticky_windows.lock().await;
-            for id in &successfully_unstaged {
-                staged.remove(id);
-                sticky.insert(*id);
-            }
+        let mut staged = self.staged_set.lock().await;
+        let mut sticky = self.sticky_windows.lock().await;
+        for id in &successfully_unstaged {
+            staged.remove(id);
+            sticky.insert(*id);
         }
 
         Ok(successfully_unstaged.len())
