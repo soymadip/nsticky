@@ -8,6 +8,7 @@ use tokio::{
 /// nsticky CLI client
 #[derive(Parser, Debug)]
 #[command(name = "nsticky")]
+#[command(version)]
 #[command(about = "Manage sticky windows via CLI", long_about = None)]
 struct Cli {
     #[command(subcommand)]
