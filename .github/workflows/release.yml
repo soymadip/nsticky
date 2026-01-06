@@ -7,6 +7,15 @@ on:
     paths:
       - 'Cargo.toml'
 
+  workflow_dispatch:
+    inputs:
+      force_release:
+        description: 'Force release even if tag exists'
+        required: false
+        type: boolean
+        default: false
+
+
 permissions:
   contents: write
 
@@ -39,23 +48,30 @@ jobs:
           fi
 
       - name: Create and Push Tag
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.check_tag.outputs.exists == 'false' || inputs.force_release == true
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
-          git push origin "v${{ env.VERSION }}"
+
+          if [ "${{ inputs.force_release }}" = "true" ] && [ "${{ steps.check_tag.outputs.exists }}" = "true" ]; then
+            echo "Forcing tag update..."
+            git tag -fa "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
+            git push --force origin "v${{ env.VERSION }}"
+          elif [ "${{ steps.check_tag.outputs.exists }}" = "false" ]; then
+            git tag -a "v${{ env.VERSION }}" -m "Release v${{ env.VERSION }}"
+            git push origin "v${{ env.VERSION }}"
+          fi
 
       - name: Setup Rust
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.check_tag.outputs.exists == 'false' || inputs.force_release == true
         uses: dtolnay/rust-toolchain@stable
 
       - name: Build Release Binary
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.check_tag.outputs.exists == 'false' || inputs.force_release == true
         run: cargo build --release --verbose
 
       - name: Create Release
-        if: steps.check_tag.outputs.exists == 'false'
+        if: steps.check_tag.outputs.exists == 'false' || inputs.force_release == true
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ env.VERSION }}
